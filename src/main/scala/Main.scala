@@ -23,58 +23,54 @@ object Main {
   def putStrlLn(value: String) = IO(println(value))
   val readLn = IO(scala.io.StdIn.readLine)
 
-  def main(args: Array[String]): Unit = {
-    val ioa1 = IO.pure(2)
-    val ioa2 = (a: Int) => IO(println(a))
+  def cmd(cmd: String): IO[Int] = {
+    val uid = UUID.randomUUID()
 
+    IO.cancelable(
+      (cb: (Either[Throwable, Int] => Unit)) => {
+        val isCancelled = new AtomicBoolean(false)
 
-    def cmd(cmd: String): IO[Int] = {
-      val uid = UUID.randomUUID()
+        var process: Option[Process] = None
 
-      IO.cancelable(
-        (cb: (Either[Throwable, Int] => Unit)) => {
-          val isCancelled = new AtomicBoolean(false)
+        val asyncResult = Future {
+          import sys.process._
+          info(s"${uid} Running `${cmd}`:")
 
-          var process: Option[Process] = None
+          val log = ProcessLogger(
+            (msg) => info(s"${uid}   ${msg}"),
+            (msg) => err(s"${uid}   ${msg}")
+          )
 
-          val asyncResult = Future {
-            import sys.process._
-            info(s"${uid} Running `${cmd}`:")
+          val proc = Process(cmd)
+          process = Some(proc.run(log))
 
-            val log = ProcessLogger(
-              (msg) => info(s"${uid}   ${msg}"),
-              (msg) => err(s"${uid}   ${msg}")
-            )
-
-            val proc = Process(cmd)
-            process = Some(proc.run(log))
-
-            process.get.exitValue()
-          }
-
-          asyncResult.onComplete {
-            case Success(value) => cb(Right(value))
-            case Failure(e) => cb(Left(e))
-          }
-
-          IO {
-            isCancelled.set(true)
-
-            process match {
-              case Some(process) => process.destroy()
-              case None => {
-                info("No process to cancel")
-              }
-            }
-
-            info("# # # set isCancelled = true")
-          }
+          process.get.exitValue()
         }
-      )
-    }
 
-    def docker(id: String): IO[Int] = cmd(s"docker run --rm -i ${id}")
+        asyncResult.onComplete {
+          case Success(value) => cb(Right(value))
+          case Failure(e) => cb(Left(e))
+        }
 
+        IO {
+          isCancelled.set(true)
+
+          process match {
+            case Some(process) => process.destroy()
+            case None => {
+              info("No process to cancel")
+            }
+          }
+
+          info("# # # set isCancelled = true")
+        }
+      }
+    )
+  }
+
+  def docker(id: String): IO[Int] = cmd(s"docker run --rm -i ${id}")
+
+  def main(args: Array[String]): Unit = {
     val contextShift = IO.contextShift(global)
 
     val program =
