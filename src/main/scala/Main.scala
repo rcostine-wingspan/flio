@@ -67,21 +67,32 @@ object Main {
     )
   }
 
-  def docker(id: String, runId: String) = cmd(s"docker run --rm -i ${id}", runId)
+  def docker(id: String, params: String, runId: String) = cmd(s"docker run --rm -i ${params} ${id}", runId)
+
+  def portAvailable(i: Int) = IO({
+
+  })
 
   def main(args: Array[String]): Unit = {
     val contextShift = IO.contextShift(global)
 
-      
+    import doobie._
+    import doobie.implicits._
+
+    val xa = Transactor.fromDriverManager[IO](
+      "org.postgresql.Driver", "jdbc:postgresql://localhost:6432/postgres", "postgres", "pwd"
+    )
+
     val program = for (
       runId <- FUUID.randomFUUID[IO];
-      // todo - i don't think "show" is right here?
-      program <- cmd("whoami", runId.show) *>
       IO.race(
-        docker("postgres", runId.show),
-        IO.sleep(5 seconds)
+        docker("postgres", "-p 6432:5432 -e POSTGRES_PASSWORD=pwd", runId.show),
+        IO.sleep(5 seconds) *> sql"select 42".query[Int].unique.transact(xa).flatMap(
+          x => IO({
+            println(x)
+          })
+        )
       )(contextShift) *>
-      cmd("psql", runId.show) *>
       IO({
         println("success")
       })) yield program
