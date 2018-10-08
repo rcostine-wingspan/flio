@@ -82,7 +82,7 @@ object Main {
     val xa = Transactor.fromDriverManager[IO](
       "org.postgresql.Driver", "jdbc:postgresql://localhost:6432/postgres", "postgres", "pwd"
     )
-
+/*
     val program = for (
       runId <- FUUID.randomFUUID[IO];
       IO.race(
@@ -96,7 +96,7 @@ object Main {
       IO({
         println("success")
       })) yield program
-
+*/
     /*IO.race(
       //youtubeDl("U9onI0MzmuI"),
 
@@ -110,7 +110,7 @@ object Main {
       }
     })*/
 
-    program.unsafeRunSync()
+    //program.unsafeRunSync()
   }
 }
 
