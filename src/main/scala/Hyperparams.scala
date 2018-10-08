@@ -90,7 +90,7 @@ object Hyperparameters {
        index: Int
     )
 
-    Stream.continually(1).zipWithIndex.map(
+    val steps = Stream.continually(1).zipWithIndex.map(
       (idx: (Int, Int)) => Experiment(
         (1 + nextInt(8) ) * 50,
         5 + nextInt(100),
@@ -103,7 +103,8 @@ object Hyperparameters {
         idx._2
       )
     ).take(100).map(
-      (e) => s"../fastText/fasttext supervised ${e.mode} " + 
+      (e) => List(
+             s"../fastText/fasttext supervised ${e.mode} " + 
              s"-input train.txt -output model${e.index} " +
              s"-dim ${e.dimensions} " +
              s"-epoch ${e.epochs} " +
@@ -111,25 +112,40 @@ object Hyperparameters {
              s"-thread ${e.threads} " + 
              s"-loss ${e.loss} " +
              s"-neg ${e.neg} " +
-             s"-minCount ${e.minCount}"
-    ).map(
-      println
+             s"-minCount ${e.minCount}",
+             s"../fastText/fasttext test model${e.index}.bin test.txt 1 > perf${e.index}_1.txt",
+             s"../fastText/fasttext test model${e.index}.bin test.txt 5 > perf${e.index}_5.txt"
+        )
     ).force
 
-    /*val program = for (
-      runId <- FUUID.randomFUUID[IO];
-      IO.race(
-        docker("postgres", "-p 6432:5432 -e POSTGRES_PASSWORD=pwd", runId.show),
-        IO.sleep(5 seconds) *> sql"select 42".query[Int].unique.transact(xa).flatMap(
-          x => IO({
-            println(x)
-          })
-        )
-      )(contextShift) *>
-      IO({
-        println("success")
-      })) yield program
+    // TODO one of the logging libraries (log4cats, console4cats)
+    // TODO cats retry
+    import cats.syntax.all._
+    import cats._, cats.data._, cats.syntax.all._, cats.effect.IO
 
-    program.unsafeRunSync()*/
+    implicit val timer = IO.timer(ExecutionContext.global)
+    implicit val Main = ExecutionContext.global
+implicit val cs = IO.contextShift(ExecutionContext.global)
+
+    val program = 
+      NonEmptyList(
+        IO({ println("Starting") }),
+        steps.map(
+        step => 
+          for (
+            runId <- FUUID.randomFUUID[IO];
+            script <- IO.race(
+              cmd(step(0), runId.toString) *> 
+              cmd(step(1), runId.toString) *> 
+              cmd(step(2), runId.toString),
+              IO.sleep(5 seconds) 
+            )(contextShift)
+          ) yield script
+      ).toList).parSequence *>
+       IO({
+         println("success")
+       })
+
+    program.unsafeRunSync()
   }
 }
