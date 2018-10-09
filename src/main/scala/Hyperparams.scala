@@ -104,7 +104,7 @@ object Hyperparameters {
       )
     ).take(100).map(
       (e) => List(
-             s"../fastText/fasttext supervised ${e.mode} " + 
+             s"../fastText/build/fasttext supervised ${e.mode} " + 
              s"-input train.txt -output model${e.index} " +
              s"-dim ${e.dimensions} " +
              s"-epoch ${e.epochs} " +
@@ -113,8 +113,8 @@ object Hyperparameters {
              s"-loss ${e.loss} " +
              s"-neg ${e.neg} " +
              s"-minCount ${e.minCount}",
-             s"../fastText/fasttext test model${e.index}.bin test.txt 1 > perf${e.index}_1.txt",
-             s"../fastText/fasttext test model${e.index}.bin test.txt 5 > perf${e.index}_5.txt"
+             s"../fastText/build/fasttext test model${e.index}.bin test.txt 1 > perf${e.index}_1.txt",
+             s"../fastText/build/fasttext test model${e.index}.bin test.txt 5 > perf${e.index}_5.txt"
         )
     ).force
 
