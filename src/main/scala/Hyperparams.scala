@@ -25,7 +25,7 @@ object Hyperparameters {
   def putStrlLn(value: String) = IO(println(value))
   val readLn = IO(scala.io.StdIn.readLine)
 
-  def cmd(cmd: String, runId: String): IO[Int] = {
+  def cmd(cmd: String)(runId: String): IO[Int] = {
 
     IO.cancelable(
       (cb: (Either[Throwable, Int] => Unit)) => {
@@ -69,7 +69,7 @@ object Hyperparameters {
     )
   }
 
-  def docker(id: String, params: String, runId: String) = cmd(s"docker run --rm -i ${params} ${id}", runId)
+  def docker(id: String, params: String)(runId: String) = cmd(s"docker run --rm -i ${params} ${id}")(runId)
 
   def portAvailable(i: Int) = IO({
 
@@ -82,39 +82,41 @@ object Hyperparameters {
        dimensions: Int,
        epochs: Int,
        neg: Int,
-       threads: Int,
        lr: Double,
-       loss: Double,
-       mode: String,
+       loss: String,
        minCount: Int,
        index: Int
     )
 
+    val FASTTEXT_PATH = "/projects/fastText"
+    val DATA_PATH = "/projects/wikipedia-categorization/"
+    val MODEL_PATH = "/projects/wikipedia-categorization/models/"
+     
     val steps = Stream.continually(1).zipWithIndex.map(
       (idx: (Int, Int)) => Experiment(
         (1 + nextInt(8) ) * 50,
         5 + nextInt(100),
         nextInt(20),
-        1 + nextInt(100),
         nextDouble(),
-        nextDouble(),
-        if (nextInt(2) > 0) { "skipgram" } else { "cbow" },
+        List("ns", "hs", "softmax")(nextInt(3)),
         nextInt(10),
         idx._2
       )
     ).take(100).map(
       (e) => List(
-             s"../fastText/build/fasttext supervised ${e.mode} " + 
-             s"-input train.txt -output model${e.index} " +
+           cmd(
+             s"${FASTTEXT_PATH}/fasttext supervised " + 
+             s"-input ${DATA_PATH}train.txt -output ${MODEL_PATH}model${e.index} " +
              s"-dim ${e.dimensions} " +
              s"-epoch ${e.epochs} " +
              s"-lr ${e.lr} " + 
-             s"-thread ${e.threads} " + 
+             s"-thread 1 " + 
              s"-loss ${e.loss} " +
              s"-neg ${e.neg} " +
-             s"-minCount ${e.minCount}",
-             s"../fastText/build/fasttext test model${e.index}.bin test.txt 1 > perf${e.index}_1.txt",
-             s"../fastText/build/fasttext test model${e.index}.bin test.txt 5 > perf${e.index}_5.txt"
+             s"-minCount ${e.minCount}"
+           )(_),
+           cmd(s"${FASTTEXT_PATH}/fasttext test ${MODEL_PATH}model${e.index}.bin ${DATA_PATH}test.txt 1 > ${DATA_PATH}perf${e.index}_1.txt")(_),
+           cmd(s"${FASTTEXT_PATH}/fasttext test ${MODEL_PATH}model${e.index}.bin ${DATA_PATH}test.txt 5 > ${DATA_PATH}perf${e.index}_5.txt")(_)
         )
     ).force
 
@@ -135,10 +137,10 @@ implicit val cs = IO.contextShift(ExecutionContext.global)
           for (
             runId <- FUUID.randomFUUID[IO];
             script <- IO.race(
-              cmd(step(0), runId.toString) *> 
-              cmd(step(1), runId.toString) *> 
-              cmd(step(2), runId.toString),
-              IO.sleep(5 seconds) 
+              step(0)(runId.toString),
+             // cmd(step(1), runId.toString) *>
+             // cmd(step(2), runId.toString),
+              IO.sleep(10 seconds) 
             )(contextShift)
           ) yield script
       ).toList).parSequence *>
