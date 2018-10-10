@@ -1,4 +1,4 @@
-import java.util.UUID
+import io.chrisdavenport.fuuid._
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.concurrent.duration._
@@ -23,8 +23,7 @@ object Main {
   def putStrlLn(value: String) = IO(println(value))
   val readLn = IO(scala.io.StdIn.readLine)
 
-  def cmd(cmd: String): IO[Int] = {
-    val uid = UUID.randomUUID()
+  def cmd(cmd: String, runId: String): IO[Int] = {
 
     IO.cancelable(
       (cb: (Either[Throwable, Int] => Unit)) => {
@@ -34,11 +33,11 @@ object Main {
 
         val asyncResult = Future {
           import sys.process._
-          info(s"${uid} Running `${cmd}`:")
+          info(s"${runId} Running `${cmd}`:")
 
           val log = ProcessLogger(
-            (msg) => info(s"${uid}   ${msg}"),
-            (msg) => err(s"${uid}   ${msg}")
+            (msg) => info(s"${runId}   ${msg}"),
+            (msg) => err(s"${runId}   ${msg}")
           )
 
           val proc = Process(cmd)
@@ -68,21 +67,36 @@ object Main {
     )
   }
 
-  def docker(id: String): IO[Int] = cmd(s"docker run --rm -i ${id}")
+  def docker(id: String, params: String, runId: String) = cmd(s"docker run --rm -i ${params} ${id}", runId)
+
+  def portAvailable(i: Int) = IO({
+
+  })
 
   def main(args: Array[String]): Unit = {
     val contextShift = IO.contextShift(global)
 
-    val program =
-      cmd("whoami") *>
+    import doobie._
+    import doobie.implicits._
+
+    val xa = Transactor.fromDriverManager[IO](
+      "org.postgresql.Driver", "jdbc:postgresql://localhost:6432/postgres", "postgres", "pwd"
+    )
+/*
+    val program = for (
+      runId <- FUUID.randomFUUID[IO];
       IO.race(
-        docker("postgres"),
-        IO.sleep(5 seconds)
+        docker("postgres", "-p 6432:5432 -e POSTGRES_PASSWORD=pwd", runId.show),
+        IO.sleep(5 seconds) *> sql"select 42".query[Int].unique.transact(xa).flatMap(
+          x => IO({
+            println(x)
+          })
+        )
       )(contextShift) *>
       IO({
         println("success")
-      })
-
+      })) yield program
+*/
     /*IO.race(
       //youtubeDl("U9onI0MzmuI"),
 
@@ -96,7 +110,7 @@ object Main {
       }
     })*/
 
-    program.unsafeRunSync()
+    //program.unsafeRunSync()
   }
 }
 
